@@ -1,0 +1,23 @@
+apiVersion: 1
+
+datasources:
+  - name: InfluxDB
+    uid: influxdb
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    jsonData:
+      version: Flux
+      organization: crypto-org
+      defaultBucket: crypto-prices
+      tlsSkipVerify: true
+    secureJsonData:
+      token: my-super-secret-token
+    isDefault: true
+
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false
