@@ -82,6 +82,17 @@ if PROMETHEUS_AVAILABLE:
         'Price buffer size per crypto',
         ['crypto_id']
     )
+    # A/B Testing metrics
+    AB_PREDICTIONS = Counter(
+        'crypto_ab_predictions_total',
+        'Predictions by model variant',
+        ['model_variant', 'prediction']
+    )
+    AB_MODEL_RATIO = Gauge(
+        'crypto_ab_model_ratio',
+        'Traffic ratio per model variant',
+        ['model_variant']
+    )
 
 
 class PriceBuffer:
@@ -167,16 +178,18 @@ class TechnicalIndicators:
 class MLPredictor:
     """
     Load and run ML model for price direction prediction.
+    Now uses A/B testing to route between champion and challenger models.
     """
     
     def __init__(self):
         self.model = None
         self.scaler = None
         self.config = None
+        self.ab_predictor = None
         self._load_model()
     
     def _load_model(self):
-        """Load trained model and scaler"""
+        """Load trained model and scaler, including A/B testing predictor"""
         model_path = os.path.join(MODELS_DIR, 'price_predictor.pkl')
         scaler_path = os.path.join(MODELS_DIR, 'feature_scaler.pkl')
         config_path = os.path.join(MODELS_DIR, 'model_config.pkl')
@@ -194,12 +207,56 @@ class MLPredictor:
         if os.path.exists(config_path):
             self.config = joblib.load(config_path)
             logger.info(f"Loaded config from {config_path}")
+        
+        # Try to load A/B testing predictor
+        try:
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+            from ml.ab_testing import get_ab_predictor
+            self.ab_predictor = get_ab_predictor()
+            if self.ab_predictor.challenger_model:
+                logger.info("A/B Testing ACTIVE: Champion (80%) vs Challenger (20%)")
+            else:
+                logger.info("A/B Testing: Champion only (no challenger)")
+        except Exception as e:
+            logger.warning(f"A/B testing not available: {e}")
+            self.ab_predictor = None
     
     def predict(self, features: Dict) -> Optional[Dict]:
         """
         Make prediction from calculated features.
-        Returns prediction label and probability.
+        Uses A/B testing if available.
+        Returns prediction label, probability, and model variant.
         """
+        # Try A/B predictor first
+        if self.ab_predictor is not None:
+            result = self.ab_predictor.predict(features)
+            if result:
+                # Track A/B metrics
+                if PROMETHEUS_AVAILABLE:
+                    AB_PREDICTIONS.labels(
+                        model_variant=result['model_variant'],
+                        prediction=result['prediction']
+                    ).inc()
+                    # Update ratio gauges
+                    metrics = self.ab_predictor.get_metrics()
+                    AB_MODEL_RATIO.labels(model_variant='champion').set(
+                        metrics.get('champion_ratio_actual', 0)
+                    )
+                    AB_MODEL_RATIO.labels(model_variant='challenger').set(
+                        metrics.get('challenger_ratio_actual', 0)
+                    )
+                
+                # Convert to expected format
+                return {
+                    'prediction': result['prediction_raw'],
+                    'label': result['prediction'],
+                    'probability': result['probability'],
+                    'probabilities': result['probabilities'],
+                    'model_variant': result['model_variant']
+                }
+        
+        # Fallback to single model
         if self.model is None or self.scaler is None:
             return None
         
@@ -232,7 +289,8 @@ class MLPredictor:
                     'DOWN': float(probabilities[0]) if len(probabilities) > 0 else 0,
                     'NEUTRAL': float(probabilities[1]) if len(probabilities) > 1 else 0,
                     'UP': float(probabilities[2]) if len(probabilities) > 2 else 0
-                }
+                },
+                'model_variant': 'champion'  # Single model fallback
             }
             
         except Exception as e:
@@ -524,9 +582,15 @@ class StreamProcessor:
 
 
 def main():
+    # Start Prometheus metrics server
+    if PROMETHEUS_AVAILABLE:
+        start_http_server(8000)
+        logger.info("Prometheus metrics server started on port 8000")
+    
     processor = StreamProcessor()
     processor.run()
 
 
 if __name__ == '__main__':
     main()
+
