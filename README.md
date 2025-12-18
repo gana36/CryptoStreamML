@@ -1,104 +1,138 @@
 # CryptoStreamML
 
-Real-time crypto price streaming pipeline with ML prediction and MLOps.
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
+![Kafka](https://img.shields.io/badge/Apache_Kafka-231F20?logo=apachekafka)
+![InfluxDB](https://img.shields.io/badge/InfluxDB-22ADF6?logo=influxdb&logoColor=white)
+![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)
+![MLflow](https://img.shields.io/badge/MLflow-0194E2?logo=mlflow&logoColor=white)
+![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?logo=scikitlearn&logoColor=white)
 
-## 🏗️ Architecture
+Real-time crypto prediction pipeline. Prices stream in every 30s, features calculate on-the-fly, ML predicts direction, results visualize live.
+
+## Architecture
 
 ```
-CoinGecko API → Kafka → Stream Processor → InfluxDB → Grafana
-                              ↓
-                         ML Model
-                              ↓
-Binance API → Training → MLflow → Model Registry
-                              ↓
-                    EvidentlyAI (Drift) → Prometheus
+┌─────────────┐     ┌─────────┐     ┌──────────────────┐     ┌──────────┐
+│  CoinGecko  │────▶│  Kafka  │────▶│ Stream Processor │────▶│ InfluxDB │
+│    API      │     │         │     │                  │     │          │
+└─────────────┘     └─────────┘     └────────┬─────────┘     └────┬─────┘
+                                             │                    │
+                                             ▼                    ▼
+┌─────────────┐     ┌─────────┐     ┌──────────────────┐     ┌──────────┐
+│ CryptoCompare│────▶│ Training│────▶│   ML Predictor   │     │ Grafana  │
+│    API      │     │  Data   │     │  (A/B Testing)   │     │          │
+└─────────────┘     └─────────┘     └────────┬─────────┘     └──────────┘
+                                             │
+                                             ▼
+                    ┌─────────┐     ┌──────────────────┐     ┌──────────┐
+                    │ MLflow  │◀────│   Auto-Retrain   │◀────│ Evidently│
+                    │         │     │                  │     │  (Drift) │
+                    └─────────┘     └──────────────────┘     └──────────┘
 ```
 
-## 🚀 Quick Start
+## Performance
 
-### 1. Start Infrastructure
+| Metric | Value |
+|--------|-------|
+| Ingestion rate | 10 messages/min (5 cryptos × 30s) |
+| Processing latency | ~150ms |
+| Model accuracy | 59% on 10K samples |
+| Buffer for predictions | 25 data points |
+
+## Prerequisites
+
+- Python 3.11+
+- Docker & Docker Compose
+- ~4GB RAM for all services
+- Ports 3000, 5000, 8086, 9090, 9092 free
+
+## Setup
+
 ```bash
+# Start services
 docker-compose up -d
-```
 
-Services started:
-| Service | Port | Description |
-|---------|------|-------------|
-| Kafka | 9092 | Message broker |
-| InfluxDB | 8086 | Time-series DB |
-| Grafana | 3000 | Visualization |
-| MLflow | 5000 | Experiment tracking |
-| Prometheus | 9090 | Metrics |
+# Install dependencies
+pip install -r requirements.txt
 
-### 2. Fetch Training Data (Binance - 90 days hourly)
-```bash
-pip install -r ml/requirements.txt
-python ml/fetch_binance_data.py
-```
+# Fetch training data (90 days from CryptoCompare)
+python ml/fetch_training_data.py
 
-### 3. Train Model with MLflow
-```bash
+# Train model
 python ml/train_model.py
-```
-View experiments: http://localhost:5000
 
-### 4. Start Producer
-```bash
-pip install -r producer/requirements.txt
+# Run producer (pulls prices)
 python producer/coingecko_producer.py
-```
 
-### 5. Start Stream Processor
-```bash
-pip install -r spark/requirements.txt
+# Run processor (predictions) - separate terminal
 python spark/stream_processor.py
 ```
 
-### 6. View Dashboards
-- **Grafana**: http://localhost:3000 (admin/admin)
-- **MLflow**: http://localhost:5000
-- **Prometheus**: http://localhost:9090
+## Services
 
-## 📊 Features
+| Port | What |
+|------|------|
+| 3000 | Grafana (admin/admin) |
+| 5000 | MLflow |
+| 8086 | InfluxDB |
+| 9090 | Prometheus |
+| 9092 | Kafka |
 
-### Streaming Pipeline
-- Real-time price ingestion from CoinGecko
-- Technical indicators (SMA, RSI, MACD, Bollinger Bands)
-- Live ML predictions (UP/DOWN/NEUTRAL)
+## A/B Testing
 
-### MLOps
-- **MLflow**: Experiment tracking, model registry
-- **Prometheus**: Pipeline metrics (latency, throughput)
-- **EvidentlyAI**: Data drift detection
+Two models run simultaneously: champion (80%) and challenger (20%). When drift is detected, auto-retrain kicks in.
 
-### Technical Indicators
-- SMA (5, 15, 24, 50 periods)
-- RSI (14 periods)
-- MACD + Signal + Histogram
-- Bollinger Bands
-- ATR, Momentum, Volatility
-
-## 📁 Project Structure
-
-```
-CryptoStreamML/
-├── docker-compose.yml      # All services
-├── producer/               # CoinGecko → Kafka
-├── spark/                  # Kafka → InfluxDB
-├── ml/
-│   ├── fetch_binance_data.py  # Training data
-│   └── train_model.py         # MLflow training
-├── monitoring/
-│   └── drift_detector.py      # EvidentlyAI
-├── models/                 # Trained models
-├── grafana/               # Dashboards
-└── prometheus/            # Metrics config
-```
-
-## 🔧 Cryptos Tracked
-Bitcoin, Ethereum, Solana, Cardano, Ripple
-
-## 🛑 Shutdown
 ```bash
-docker-compose down
+# Check A/B status
+python ml/ab_testing.py
+
+# Force retrain challenger
+python ml/auto_retrain.py --force
+
+# Drift detection with auto-retrain
+python monitoring/drift_detector.py --auto-retrain
 ```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AB_CHAMPION_RATIO` | 0.8 | Traffic to champion model |
+| `DRIFT_THRESHOLD` | 0.3 | Drift % to trigger retrain |
+| `POLL_INTERVAL` | 30 | Seconds between price fetches |
+
+## Troubleshooting
+
+**"No data" on Grafana**
+- Check stream processor is running
+- Wait for buffer to reach 25+
+
+**Port already in use**
+```bash
+netstat -ano | findstr :8000
+```
+
+**CoinGecko 429 errors**
+- Rate limited. Keep POLL_INTERVAL at 30s
+
+**Prometheus targets DOWN**
+- Restart stream processor after code changes
+
+## CI/CD
+
+GitHub Actions on `prod` branch: lint → test → build → deploy
+
+## Structure
+
+```
+├── producer/          # CoinGecko → Kafka
+├── spark/             # Kafka → ML → InfluxDB
+├── ml/                # Training, A/B, auto-retrain
+├── monitoring/        # Drift detection
+├── models/            # Saved models
+├── grafana/           # Dashboard configs
+└── prometheus/        # Metrics config
+```
+.
