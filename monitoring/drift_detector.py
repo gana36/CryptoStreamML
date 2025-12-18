@@ -288,8 +288,35 @@ def main():
         print(f"\n📄 Full HTML Report: {result['report_path']}")
         print("   Open in browser to see detailed visualizations")
     
+    # Check for auto-retrain
+    drift_share = result.get('drift_share', 0)
+    auto_retrain = '--auto-retrain' in sys.argv or '--retrain' in sys.argv
+    
+    if auto_retrain and drift_share > 0:
+        print("\n" + "="*60)
+        print("AUTO-RETRAIN CHECK")
+        print("="*60)
+        try:
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+            from ml.auto_retrain import check_and_retrain
+            
+            retrain_result = check_and_retrain(drift_share)
+            
+            if retrain_result.get('retrain_triggered'):
+                if retrain_result.get('retrain_result', {}).get('success'):
+                    print("\n🔄 Auto-retrain triggered and successful!")
+                    print("   New challenger model ready for A/B testing.")
+                else:
+                    print("\n❌ Auto-retrain triggered but failed.")
+        except Exception as e:
+            print(f"\n⚠️ Auto-retrain check failed: {e}")
+    
     print("\n" + "="*60)
+    print("\nTip: Run with --auto-retrain to enable automatic retraining on drift")
 
 
 if __name__ == '__main__':
+    import sys
     main()
+
