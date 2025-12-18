@@ -135,14 +135,4 @@ GitHub Actions on `prod` branch: lint → test → build → deploy
 ├── grafana/           # Dashboard configs
 └── prometheus/        # Metrics config
 ```
-
-## Roadmap
-
-- [ ] FastAPI prediction endpoint
-- [ ] Kubernetes deployment
-- [ ] More crypto pairs
-- [ ] Ensemble models (XGBoost, LightGBM)
-
-## License
-
-MIT
+.
