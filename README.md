@@ -48,8 +48,7 @@ Real-time crypto prediction pipeline. Prices stream in every 30s, features calcu
 
 - Python 3.11+
 - Docker & Docker Compose
-- ~4GB RAM for all services
-- Ports 3000, 5000, 8086, 9090, 9092 free
+
 
 ## Setup
 
