@@ -10,6 +10,9 @@
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?logo=scikitlearn&logoColor=white)
 
 Real-time crypto prediction pipeline. Prices stream in every 30s, features calculate on-the-fly, ML predicts direction, results visualize live.
+<img width="1280" height="428" alt="image" src="https://github.com/user-attachments/assets/6f5d699c-97ec-4f3c-9874-f651b038837b" />
+<img width="1419" height="833" alt="image" src="https://github.com/user-attachments/assets/017b8c42-1695-4e5b-b923-b01702f0571e" />
+
 
 ## Architecture
 
